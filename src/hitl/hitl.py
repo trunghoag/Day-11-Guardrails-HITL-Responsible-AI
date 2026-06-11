@@ -65,32 +65,41 @@ class ConfidenceRouter:
         Returns:
             RoutingDecision with routing action and metadata
         """
-        # TODO 12: Implement routing logic
-        #
-        # 1. Check if action_type is in HIGH_RISK_ACTIONS
-        #    -> If yes: always escalate (action="escalate", priority="high",
-        #       requires_human=True, reason="High-risk action: {action_type}")
-        #
-        # 2. Check confidence thresholds:
-        #    - confidence >= 0.9:
-        #      action="auto_send", priority="low",
-        #      requires_human=False, reason="High confidence"
-        #
-        #    - 0.7 <= confidence < 0.9:
-        #      action="queue_review", priority="normal",
-        #      requires_human=True, reason="Medium confidence — needs review"
-        #
-        #    - confidence < 0.7:
-        #      action="escalate", priority="high",
-        #      requires_human=True, reason="Low confidence — escalating"
+        # 1. High-risk actions always escalate regardless of confidence
+        if action_type in HIGH_RISK_ACTIONS:
+            return RoutingDecision(
+                action="escalate",
+                confidence=confidence,
+                reason=f"High-risk action: {action_type}",
+                priority="high",
+                requires_human=True,
+            )
 
-        return RoutingDecision(
-            action="auto_send",
-            confidence=confidence,
-            reason="TODO: implement routing logic",
-            priority="low",
-            requires_human=False,
-        )  # TODO: Replace with implementation
+        # 2. Confidence threshold routing
+        if confidence >= self.HIGH_THRESHOLD:
+            return RoutingDecision(
+                action="auto_send",
+                confidence=confidence,
+                reason="High confidence",
+                priority="low",
+                requires_human=False,
+            )
+        elif confidence >= self.MEDIUM_THRESHOLD:
+            return RoutingDecision(
+                action="queue_review",
+                confidence=confidence,
+                reason="Medium confidence — needs review",
+                priority="normal",
+                requires_human=True,
+            )
+        else:
+            return RoutingDecision(
+                action="escalate",
+                confidence=confidence,
+                reason="Low confidence — escalating",
+                priority="high",
+                requires_human=True,
+            )
 
 
 # ============================================================
@@ -109,27 +118,64 @@ class ConfidenceRouter:
 hitl_decision_points = [
     {
         "id": 1,
-        "name": "TODO: Name this decision point",
-        "trigger": "TODO: When does this trigger?",
-        "hitl_model": "TODO: human-in-the-loop / human-on-the-loop / human-as-tiebreaker",
-        "context_needed": "TODO: What does the reviewer need to see?",
-        "example": "TODO: Give a concrete example scenario",
+        "name": "Large Fund Transfer Approval",
+        "trigger": (
+            "Customer requests a transfer above 50,000,000 VND — "
+            "or any international wire transfer regardless of amount. "
+            "Also triggered when the destination account is newly added (< 24h old)."
+        ),
+        "hitl_model": "human-in-the-loop",
+        "context_needed": (
+            "Full transaction details (amount, currency, sender/receiver account, timestamp), "
+            "customer KYC status, prior transaction history, fraud risk score from the risk engine, "
+            "and any recent suspicious activity flags."
+        ),
+        "example": (
+            "A customer asks the chatbot to transfer 200,000,000 VND to a newly added account. "
+            "The system pauses execution and routes the request to a bank officer for manual "
+            "verification and approval before the transaction is executed."
+        ),
     },
     {
         "id": 2,
-        "name": "TODO: Name this decision point",
-        "trigger": "TODO: When does this trigger?",
-        "hitl_model": "TODO: human-in-the-loop / human-on-the-loop / human-as-tiebreaker",
-        "context_needed": "TODO: What does the reviewer need to see?",
-        "example": "TODO: Give a concrete example scenario",
+        "name": "Ambiguous Complaint / Dispute Escalation",
+        "trigger": (
+            "Agent confidence is below 0.7 when handling a complaint, dispute, or fraud report. "
+            "Also triggered when a customer uses escalation keywords such as "
+            "'legal action', 'sue', 'regulator', 'central bank', or 'fraud'."
+        ),
+        "hitl_model": "human-on-the-loop",
+        "context_needed": (
+            "Full conversation history, the specific disputed transaction(s), "
+            "the AI's draft response, and any prior support tickets for this customer. "
+            "The human reviewer can approve, edit, or reject the AI's response before it is sent."
+        ),
+        "example": (
+            "A customer reports an unauthorized deduction of 500,000 VND and threatens to file "
+            "a complaint with the State Bank of Vietnam. The AI drafts a response, but a support "
+            "specialist reviews it — and adjusts the tone and accuracy — before it is delivered."
+        ),
     },
     {
         "id": 3,
-        "name": "TODO: Name this decision point",
-        "trigger": "TODO: When does this trigger?",
-        "hitl_model": "TODO: human-in-the-loop / human-on-the-loop / human-as-tiebreaker",
-        "context_needed": "TODO: What does the reviewer need to see?",
-        "example": "TODO: Give a concrete example scenario",
+        "name": "Loan Eligibility Edge Case",
+        "trigger": (
+            "Two automated scoring models disagree on a customer's loan eligibility "
+            "(e.g., rule-based engine says APPROVED, ML model says DECLINED), "
+            "or the customer's credit score falls in the 580-620 borderline range."
+        ),
+        "hitl_model": "human-as-tiebreaker",
+        "context_needed": (
+            "Customer credit report, employment and income verification documents, "
+            "both models' scores with their reasoning, loan amount and term requested, "
+            "and the customer's current debt-to-income ratio."
+        ),
+        "example": (
+            "A small business owner applies for a 500 million VND business loan. "
+            "The rule-based system approves (income threshold met) but the ML model rejects "
+            "(high recent credit utilization). A senior credit officer reviews both verdicts "
+            "and makes the final lending decision."
+        ),
     },
 ]
 
